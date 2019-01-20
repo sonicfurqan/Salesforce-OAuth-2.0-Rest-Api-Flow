@@ -1,0 +1,102 @@
+public class SSO {
+    private static String ConsumerKey ='asdfjklqwertzxcvbnmgtyp';
+    private static String ConsumerSecret ='1234567';
+    static string reurl='https://myinstance.visualforce.com/apex/SSO';
+    
+    
+    //returns url for oAuth2.0 
+    public static String setupAthuntication(String userName){
+        /*Descriptn: Setp 1. of oAuth2.0 flow 
+         * returns url that opens new window where user logins in to sf org and then authorize access and then it i redirected to redirect url provided
+		*/
+      
+        //based on login type add customer key and return url 
+        string URI = 'https://login.salesforce.com/services/oauth2/authorize';
+        String response_type='?response_type=code&';
+        String client_id ='client_id=' + ConsumerKey + '&';
+        String redirect_uri='redirect_uri=' + reurl+'&';
+        String login_hint='login_hint=' + userName+'&';
+        String prompt='prompt=login&';
+        
+        String state='state='+[SELECT id FROM Account LIMIT 1].Id;
+        String url=URI+response_type+client_id+redirect_uri+prompt+login_hint+state;
+        return url; 
+    }
+    
+ 
+    public static String getRefreshToken(String instance_ur,String refresh_token){
+        /*Descriptn: Setp 3. of oAuth2.0 flow 
+         * using refresh token calling sf again to get new access token
+		*/
+      
+                string URI = instance_ur+'/services/oauth2/token';
+                String response_type='?grant_type=refresh_token&';
+                String client_id ='client_id=' + encodingUtil.urlencode(ConsumerKey,'UTF-8') + '&';
+                String client_secret='client_secret=' + ConsumerSecret+'&';
+                String refresh_token='refresh_token='+encodingUtil.URLEncode(refresh_token,'UTF-8');
+                HttpRequest request=new HttpRequest();
+                request.setEndpoint(URI+response_type+client_id+client_secret+refresh_token);
+                request.setMethod('POST');
+                request.setHeader('Authorization',EncodingUtil.base64Encode(Blob.valueOf(ConsumerKey+':'+ConsumerSecret)));
+                HttpResponse response=new Http().send(request);
+                if(response.getStatusCode() ==200){
+                    Map<String,Object> responseBody=(Map<String,Object>) JSON.deserializeUntyped(response.getBody());
+                    String sessionId=String.valueOf(responseBody.get('access_token'));
+                    String orgUrl=String.valueOf(responseBody.get('instance_url'));
+                   
+            }
+            
+        return null;
+    }
+    
+   
+    
+    ///method called when return url on oauth is called
+    public PageReference onLoad (){
+        /*Descriptn: Setp 2. of oAuth2.0 flow 
+         * returns to the url provided with access code in as url parameter using which calling sf agin to get access token
+		*/
+        String returnedParametercode='code';
+        String returnedParameterstate='state';
+        String returnedParametererror='error';
+        
+        PageReference pageref=ApexPages.currentPage();
+        Map<String,String> parameters=pageref.getParameters();
+        if(parameters.containsKey(returnedParametererror)){
+            	
+        }
+        if(parameters.containsKey(returnedParametercode)){
+            //code contains auth key 
+            String code=parameters.get(returnedParametercode);
+            //sate contains parameters that user wants to return
+            String id=parameters.get(returnedParameterstate);
+            //using auth key getting token
+            String uri='https://login.salesforce.com/services/oauth2/token';
+            String grant_type='?grant_type=authorization_code&';
+            String codeParam='code='+code+'&';        
+            String client_id='client_id='+ConsumerKey+'&';
+            String client_secret='client_secret='+ConsumerSecret+'&';
+            String redirect_uri='redirect_uri='+reurl;
+            HttpRequest request=new HttpRequest();
+            request.setEndpoint(uri+grant_type+codeParam+client_id+client_secret+redirect_uri);
+            request.setMethod('POST');
+            request.setHeader('Authorization',EncodingUtil.base64Encode(Blob.valueOf(ConsumerKey+':'+ConsumerSecret)));
+            HttpResponse response=new Http().send(request);
+            if(response.getStatusCode() ==200){
+                Map<String,Object> responseBody=(Map<String,Object>) JSON.deserializeUntyped(response.getBody());
+                String sessionId=String.valueOf(responseBody.get('access_token'));
+                String orgUrl=String.valueOf(responseBody.get('instance_url'));
+                String id_token=String.valueOf(responseBody.get('id_token'));
+                String refresh_token=String.valueOf(responseBody.get('refresh_token'));
+                
+                String s='/lightning/r/Account/'+id+'/view';
+                PageReference pgRef = new PageReference(s);
+                return pgRef; 
+                
+            }
+                
+        }
+        return null;
+    }
+
+}
